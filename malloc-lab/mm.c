@@ -82,7 +82,9 @@ team_t team = {
 
 
 static void * heap_listp;
-static void *extend_heap(size_t words);
+static void *extend_heap(size_t);
+static void *coalesce(void *);
+static void *find_fit(size_t);
 
 /*
  * mm_init - initialize the malloc package.
@@ -122,6 +124,40 @@ static void *extend_heap(size_t words){
     return coalesce(bp);
 }
 
+static void *coalesce(void *bp){
+    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+    size_t size = GET_SIZE(HDRP(bp));
+
+    if(prev_alloc && next_alloc){ // * case 1
+        return bp;
+    }
+
+    else if(prev_alloc && !next_alloc) { // *case 2
+        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
+    }
+
+    else if(!prev_alloc && next_alloc){ // *case 3
+        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+        PUT(FTRP(bp), PACK(size, 0));
+        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        bp = PREV_BLKP(bp);
+    }
+
+    else {
+        size += GET_SIZE(HDRP(PREV_BLKP(bp))) +
+            GET_SIZE(FTRP(NEXT_BLKP(bp)));
+
+        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+        bp = PREV_BLKP(bp);
+    }
+
+    return bp;
+}
+
 
 /*
  * mm_malloc - Allocate a block by incrementing the brk pointer.
@@ -129,22 +165,64 @@ static void *extend_heap(size_t words){
  */
 void *mm_malloc(size_t size)
 {
-    int newsize = ALIGN(size + SIZE_T_SIZE);
-    void *p = mem_sbrk(newsize);
-    if (p == (void *)-1)
+    size_t asize;
+    size_t extendsize;
+    char *bp;
+
+    if(size == 0)
         return NULL;
+
+    if (size <= DSIZE)
+        asize = 2*DSIZE;
     else
-    {
-        *(size_t *)p = size;
-        return (void *)((char *)p + SIZE_T_SIZE);
+        asize = DSIZE * ((size + (DSIZE) + (DSIZE -1)) / DSIZE);
+
+    if((bp = find_fit(asize)) != NULL){
+        place(bp, asize);
+        return bp;
+    }
+
+    extendsize = Max(asize, CHUNKSIZE);
+    if((bp = extend_heap(extendsize/WSIZE)) == NULL)
+        return NULL;
+    place(bp, asize);
+    return bp;
+}
+
+static void *find_fit(size_t asize){
+    void *bp;
+
+    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))){
+            return bp;
+        }
+    }
+    return NULL; 
+}
+
+static void place(void *bp, size_t asize){
+    size_t csize = GET_SIZE(HDRP(bp));
+
+    if((csize - asize) >= (2*DSIZE)){
+        PUT(HDRP(bp), PACK(asize, 1));
+        PUT(FTRP(bp), PACK(asize, 1));
+        bp = NEXT_BLKP(bp);
+        PUT(HDRP(bp), PACK(csize-asize, 0));
+        PUT(FTRP(bp), PACK(csize-asize, 0));
     }
 }
+
 
 /*
  * mm_free - Freeing a block does nothing.
  */
 void mm_free(void *ptr)
 {
+    size_t size = GET_SIZE(HDRP(ptr));
+
+    PUT(HDRP(ptr), PACK(size, 0));
+    PUT(FTRP(ptr), PACK(size, 0));
+    coalesce(ptr);
 }
 
 /*
