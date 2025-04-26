@@ -35,12 +35,29 @@ team_t team = {
     ""};
 
 /* single word (4) or double word (8) alignment */
+/*64
+
+/* 32비트 운영체제를 사용하기 때문에 8바이트 사용...*/
 #define ALIGNMENT 8
 
 /* rounds up to the nearest multiple of ALIGNMENT */
+/* size를 8의 배수로 올림 연산을 해주는 것이다.*/
+/* (size + 7) : 8로 나누어 떨어지게 만들기 위해 +7
+~0x7 = 0xFFFFFFF8 (하위 3비트 0 → AND 하면 하위 비트 날리고 8의 배수 됨)
+비트 마스킹을 활용한 빠른 나머지 제거 방식 */
 #define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~0x7)
 
+/* size_t 크기를 8의 배수로 올린 값 (정렬 안전성 확보) */
+/*정렬 깨지면 성능 문제 + 크래시 위험*/
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
+
+
+/* Basic constants and macros */
+#define WSIZE 4 /* word size (byte)*/
+#define DSIZE 8 /* double word SIZE (byte) */
+#define CHUNKSIZE (1<<12) /* 초기 가용 블록과 힙 확장을 위한 크기 (byte)*/
+
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
 
 /*
  * mm_init - initialize the malloc package.
