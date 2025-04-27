@@ -85,10 +85,12 @@ static void * heap_listp;
 static void *extend_heap(size_t);
 static void *coalesce(void *);
 static void *find_fit(size_t);
+static void place(void *, size_t);
 
 /*
  * mm_init - initialize the malloc package.
  */
+
 int mm_init(void)
 {
     /* Create the initial empty heap*/
@@ -182,7 +184,7 @@ void *mm_malloc(size_t size)
         return bp;
     }
 
-    extendsize = Max(asize, CHUNKSIZE);
+    extendsize = MAX(asize, CHUNKSIZE);
     if((bp = extend_heap(extendsize/WSIZE)) == NULL)
         return NULL;
     place(bp, asize);
@@ -209,6 +211,11 @@ static void place(void *bp, size_t asize){
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize-asize, 0));
         PUT(FTRP(bp), PACK(csize-asize, 0));
+    }
+
+    else{
+        PUT(HDRP(bp), PACK(csize, 1));
+        PUT(FTRP(bp), PACK(csize, 1));
     }
 }
 
