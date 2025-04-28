@@ -41,7 +41,7 @@ team_t team = {
 #define ALIGNMENT 8
 
 /* rounds up to the nearest multiple of ALIGNMENT */
-/* size를 8의 배수로 올림 연산을 해주는 것이다.*/
+/* size를 8의 배수로 올림 연산을 해주는 것이다..*/
 /* (size + 7) : 8로 나누어 떨어지게 만들기 위해 +7
 ~0x7 = 0xFFFFFFF8 (하위 3비트 0 → AND 하면 하위 비트 날리고 8의 배수 됨))
 비트 마스킹을 활용한 빠른 나머지 제거 방식 */
@@ -81,6 +81,14 @@ team_t team = {
 #define PREV_BLKP(bp)   ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
 
+/* 명시적 가용리스트 관리를 위한 매크로 추가 */
+
+// * payload 안에 pred 와 succ 를 찾는 매크로
+#define SUCC(bp) (*(void **)(bp)) // payload 시작주소 (즉, pred 시작주소) 
+#define PREP(bp) (*(void **)((char *)(bp) + WSIZE))// pred 다음주소 (즉 succ 시작주소)
+
+
+static void * free_listp; // *  명시적 가용 리스트 관리를 위한 listp
 static void * heap_listp;
 // * next_fit 사용시 last_bp 사용
 static void * last_bp;
@@ -88,6 +96,10 @@ static void *extend_heap(size_t);
 static void *coalesce(void *);
 static void *find_fit(size_t);
 static void place(void *, size_t);
+
+/* 명시적 가용 리스트 관리를 위한 함수*/
+static void new_free_block(void *);
+static void remove(void *);
 
 
 /*
@@ -97,13 +109,16 @@ static void place(void *, size_t);
 int mm_init(void)
 {
     /* Create the initial empty heap*/
-    if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *) - 1)
+    if ((heap_listp = mem_sbrk(6*WSIZE)) == (void *) - 1)
         return -1;
     PUT(heap_listp, 0); // [0]: Padding (더미 4바이트)
-    PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); // [4]: Prologue Header (8B, allocated)
-    PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); // [8]: Prologue Footer (8B, allocated)
-    PUT(heap_listp + (3*WSIZE), PACK(0, 1)); // [12]: Epilogue Header (0B, allocated)
-    heap_listp += (2*WSIZE);
+    PUT(heap_listp + (1*WSIZE), PACK(DSIZE*2, 1)); // [4]: Prologue Header (16B, allocated)
+    PUT(heap_listp + (2*WSIZE), (int)NULL); // [8]: Prologue SUCCESSOR  (4B) -> NULL
+    PUT(heap_listp + (3*WSIZE), (int)NULL); // [12]: Prologue PREDECESSOR  (4B) -> NULL
+    PUT(heap_listp + (4*WSIZE), PACK(DSIZE*2, 1)); // [16]: Prologue Footer (16B, allocated)
+    PUT(heap_listp + (5*WSIZE), PACK(0, 1)); // [20]: Epilogue Header (0B, allocated)
+    
+    free_listp = heap_listp + DSIZE;
 
     /* Extend the empty heap with a free block of CHUNKESIZE bytes */
     if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
@@ -129,11 +144,39 @@ static void *extend_heap(size_t words){
     return coalesce(bp);
 }
 
+// 새로 반환되거나 생성된 가용 블록을 가용 리스트에 추가
+// * 이때 반환되는건 항상 루트의 다음 노드가 된다.
+static void new_free_block(void *bp){
+    PREP(bp) = NULL;
+    SUCC(bp) = free_listp;
+    PREP(free_listp) = bp;
+    free_listp = bp;
+}
+
+static void remove(void *bp){ 
+// 생각 해야 할 껀 단 두개 
+// 1. 삭제할 bp 가 head 일때
+// 2. head 아닐때 (양 옆에 둘다 있을 때)
+
+// 양 옆에 한개가 있을 때는 상황이 안나옴...
+// 설정해둔 프롤로그 블록이 뒤를 항상 지키는 중 !
+
+    if (bp == free_listp){ // * 삭제할 bp가 head일때
+        PREP(SUCC(bp)) = NULL;
+        free_listp = SUCC(bp);
+    }
+
+    else{ // * 양 옆에 둘다 있을 때
+        PREP(SUCC(bp)) = PREP(bp);
+        SUCC(PREP(bp)) = SUCC(bp);
+    }
+}
+
 static void *coalesce(void *bp){
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
-
+    
     if(prev_alloc && next_alloc){ // * case 1
         // *next_fit 사용시 추가
         last_bp = bp;
