@@ -100,6 +100,7 @@ static void place(void *, size_t);
 /* 명시적 가용 리스트 관리를 위한 함수*/
 static void new_free_block(void *);
 static void remove(void *);
+static void removeForPlace(void *);
 
 
 /*
@@ -176,7 +177,7 @@ static void *coalesce(void *bp){
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
-    
+
     if(prev_alloc && next_alloc){ // * case 1
         // *next_fit 사용시 추가
         last_bp = bp;
@@ -309,11 +310,29 @@ static void place(void *bp, size_t asize){
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize-asize, 0));
         PUT(FTRP(bp), PACK(csize-asize, 0));
+        removeForPlace(bp);
     }
 
     else{
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
+        remove(bp);
+    }
+}
+
+static void removeForPlace(void *bp){
+    if (PREV_BLKP(bp) == free_listp){ //place 대상이 header 일때
+        PREP(SUCC(PREV_BLKP(bp))) = bp;
+        free_listp = bp;
+        SUCC(bp) = SUCC(PREV_BLKP(bp));
+        PREP(bp) = NULL;
+    }
+
+    else{ // place 대상이 header가 아닐때
+        SUCC(PREP(PREV_BLKP(bp))) = bp;
+        PREP(bp) = PREP(PREV_BLKP(bp));
+        PREP(SUCC(PREV_BLKP(bp))) = bp;
+        SUCC(bp) = SUCC(PREV_BLKP(bp));
     }
 }
 
