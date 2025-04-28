@@ -43,7 +43,7 @@ team_t team = {
 /* rounds up to the nearest multiple of ALIGNMENT */
 /* size를 8의 배수로 올림 연산을 해주는 것이다.*/
 /* (size + 7) : 8로 나누어 떨어지게 만들기 위해 +7
-~0x7 = 0xFFFFFFF8 (하위 3비트 0 → AND 하면 하위 비트 날리고 8의 배수 됨)
+~0x7 = 0xFFFFFFF8 (하위 3비트 0 → AND 하면 하위 비트 날리고 8의 배수 됨))
 비트 마스킹을 활용한 빠른 나머지 제거 방식 */
 #define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~0x7)
 
