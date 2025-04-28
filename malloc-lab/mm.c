@@ -82,6 +82,7 @@ team_t team = {
 
 
 static void * heap_listp;
+// * next_fit 사용시 last_bp 사용
 static void * last_bp;
 static void *extend_heap(size_t);
 static void *coalesce(void *);
@@ -136,7 +137,6 @@ static void *coalesce(void *bp){
     if(prev_alloc && next_alloc){ // * case 1
         // *next_fit 사용시 추가
         last_bp = bp;
-
         return bp;
     }
 
@@ -200,9 +200,9 @@ void *mm_malloc(size_t size)
 }
 
 static void *find_fit(size_t asize){
-    /* 
-    *주석 처리는 first fit
-    */
+
+    // *first_fit
+
     // void *bp;
 
     // for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
@@ -212,8 +212,8 @@ static void *find_fit(size_t asize){
     // }
     // return NULL; 
 
-    // * 해당 함수는 next_fit을 통한 구현
-    
+    // * next_fit
+
     void *bp = last_bp;
 
     // last_bp부터 힙 끝까지 탐색
@@ -235,6 +235,26 @@ static void *find_fit(size_t asize){
     }
 
     return NULL;
+
+    // // * best_fit
+
+    // void *bp;
+    // void *best_bp = NULL;
+    // size_t best_size = (size_t)(-1); // unsignded int 특성상 음수 값이 해당 자료형의 최댓값
+    // size_t size;
+
+    // for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0 ; bp = NEXT_BLKP(bp)){
+    //     size = GET_SIZE(HDRP(bp));
+
+    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= size)){
+    //         if(size < best_size){
+    //             best_size = size;
+    //             best_bp = bp;
+    //         }
+    //     }
+    // }
+
+    // return best_bp;
 }
 
 static void place(void *bp, size_t asize){
