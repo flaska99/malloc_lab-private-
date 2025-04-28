@@ -82,10 +82,12 @@ team_t team = {
 
 
 static void * heap_listp;
+static void * last_bp;
 static void *extend_heap(size_t);
 static void *coalesce(void *);
 static void *find_fit(size_t);
 static void place(void *, size_t);
+
 
 /*
  * mm_init - initialize the malloc package.
@@ -132,6 +134,9 @@ static void *coalesce(void *bp){
     size_t size = GET_SIZE(HDRP(bp));
 
     if(prev_alloc && next_alloc){ // * case 1
+        // *next_fit 사용시 추가
+        last_bp = bp;
+
         return bp;
     }
 
@@ -148,7 +153,7 @@ static void *coalesce(void *bp){
         bp = PREV_BLKP(bp);
     }
 
-    else {
+    else { // * case 4
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) +
             GET_SIZE(FTRP(NEXT_BLKP(bp)));
 
@@ -157,6 +162,8 @@ static void *coalesce(void *bp){
         bp = PREV_BLKP(bp);
     }
 
+    // *next_fit 사용시 추가
+    last_bp = bp;
     return bp;
 }
 
@@ -187,19 +194,47 @@ void *mm_malloc(size_t size)
     extendsize = MAX(asize, CHUNKSIZE);
     if((bp = extend_heap(extendsize/WSIZE)) == NULL)
         return NULL;
+
     place(bp, asize);
     return bp;
 }
 
 static void *find_fit(size_t asize){
-    void *bp;
+    /* 
+    *주석 처리는 first fit
+    */
+    // void *bp;
 
-    for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))){
+    // for(bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+    //     if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))){
+    //         return bp;
+    //     }
+    // }
+    // return NULL; 
+
+    // * 해당 함수는 next_fit을 통한 구현
+    
+    void *bp = last_bp;
+
+    // last_bp부터 힙 끝까지 탐색
+    for(bp = NEXT_BLKP(bp); GET_SIZE(HDRP(bp)) != 0; bp = NEXT_BLKP(bp)){
+        if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))){
+            last_bp = bp; // 찾았으면 last_bp 업데이트
             return bp;
         }
     }
-    return NULL; 
+
+    bp = heap_listp;
+    // 못 찾으면 heap_listp부터 last_bp까지 다시 탐색
+    while (bp < last_bp) {
+        bp = NEXT_BLKP(bp);
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp)))) {
+            last_bp = bp;
+            return bp;
+        }
+    }
+
+    return NULL;
 }
 
 static void place(void *bp, size_t asize){
